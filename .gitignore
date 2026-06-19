@@ -1,0 +1,14 @@
+# Vivado Junk Files
+*.jou
+*.log
+*.str
+*.pb
+*.wdb
+.Xil/
+
+# Vivado Generated Folders
+uart_ip_core.cache/
+uart_ip_core.hw/
+uart_ip_core.ip_user_files/
+uart_ip_core.runs/
+uart_ip_core.sim/
