@@ -2,7 +2,9 @@ module uart_top #(
     parameter DATA_BITS   = 8,
     parameter STOP_BITS   = 1,
     parameter PARITY_TYPE = 0,
-    parameter ADDR_WIDTH  = 4
+    parameter ADDR_WIDTH  = 4,
+    parameter IBRD = 27,
+    parameter FBRD = 8
 )(
     input  wire clk,
     input  wire rst_n,
@@ -19,7 +21,10 @@ module uart_top #(
 
     output wire tx_out,
     output wire overrun_err,
-    input  wire rx_in
+    input  wire rx_in,
+    
+    input wire cts_n,
+    output reg rts_n
 );
 
     wire baud_tick;
@@ -33,8 +38,35 @@ module uart_top #(
     wire rx_valid;
     wire frame_err;
     wire parity_err;
+    
+    wire rx_almost_full;
+    
+    reg cts_sync1;
+    reg cts_sync2;
+    
+    wire cts_active;
+    
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            cts_sync1 <= 1'b0;
+            cts_sync2 <= 1'b0;
+        end else begin 
+            cts_sync1 <= ~cts_n;
+            cts_sync2 <= cts_sync1;
+        end
+    end
+    
+    assign cts_active = cts_sync2; //just for readability
+    
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            rts_n <= 1'b1; // NOT requesting for receiving
+        end else begin
+            rts_n <= rx_almost_full;
+        end
+    end            
 
-    wire tx_start_internal = (!tx_fifo_empty) && (!tx_busy);
+    wire tx_start_internal = (!tx_fifo_empty) && (!tx_busy) && cts_active;
     wire tx_fifo_rd_en     = tx_start_internal;
 
     wire rx_fifo_wr_en = rx_valid;
@@ -42,7 +74,10 @@ module uart_top #(
     assign overrun_err = rx_valid && rx_fifo_full;
 
     // BAUD GENERATOR    
-    baud_gen u_baud_gen (
+    baud_gen #(
+        .IBRD(IBRD),
+        .FBRD(FBRD)
+    ) u_baud_gen (
         .clk         (clk),
         .rst_n       (rst_n),
         .baud_tick   (baud_tick),
@@ -111,9 +146,9 @@ module uart_top #(
         .wr_en           (rx_fifo_wr_en),
         .rd_en           (rx_rd_en),
         .din             (rx_uart_data),
-        .full_threshold  ({ADDR_WIDTH+1{1'b1}}), 
+        .full_threshold  ((1<<ADDR_WIDTH)-2), 
         .empty_threshold (0),
-        .almost_full     (),
+        .almost_full     (rx_almost_full),
         .almost_empty    (),
         .dout            (rx_data_out),
         .full            (rx_fifo_full),
